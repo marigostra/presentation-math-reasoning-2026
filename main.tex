@@ -1,19 +1,22 @@
 \documentclass{beamer}
 
+\usepackage[T2A]{fontenc}
 \usepackage[russian]{babel}
 \usepackage[utf8]{inputenc}
-\usepackage{cmap}
 \usepackage{graphicx}
 \usepackage{xspace}
 \usepackage{psfrag}
 \usepackage{hyperref}
 \usepackage[normalem]{ulem}
+\usepackage{booktabs}
+\usepackage{tabularx}
+
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 
 \beamertemplatenavigationsymbolsempty
 \setbeamertemplate{footline}[frame number]
 \usecolortheme{seahorse}
 
-%%Исправляем греческие буквы в формулах, они должны быть прямыми, а не курсивными
 \DeclareSymbolFont{greek}{U}{eur}{m}{n}                                                        
 \SetSymbolFont{greek}{bold}{U}{eur}{b}{n}                                                      
 \DeclareSymbolFontAlphabet{\gr}{greek}                                                         
@@ -55,37 +58,391 @@
 \begin{document}
 \maketitle
 
+% Слайд 1
 \begin{frame}
-  \frametitle{Цель и задачи}
-
-  {\bf Цель: } разработать датасет и сопутствующий инструментарий для~повышения качества математического вывода с~использованием языковых моделей.
-
-  {\bf Задачи:}
-
-  \begin{enumerate}
-  \item{Предобработать датасет.}
-  \item{Провести обучение модели.}
-    \item{Оценить качество на~тестовой выборке.}
-    \end{enumerate}
-
+  \frametitle{Введение: Проект SHARP}
+  \begin{center}
+      \Huge \textbf{SHARP} \\[0.5em]
+      \Large Span-level Hallucination Annotation \\ for Reasoning Paths
+  \end{center}
+  \vspace{1em}
+  
+  \large Датасет для детекции галлюцинаций на уровне фрагментов в математических рассуждениях.
+  
+  \vspace{1em}
+  \normalsize
+  \begin{itemize}
+      \item \textbf{11K} примеров
+      \item \textbf{Span-level} аннотации
+      \item \textbf{Open Source}
+  \end{itemize}
 \end{frame}
 
+% Слайд 2
 \begin{frame}
-\frametitle{UML}
-\framesubtitle{Вставьте свою диаграмму для пояснения работы}
-\begin{figure}[h]
-\includegraphics[width=9cm,height=5cm,keepaspectratio]{demo-uml.pdf}
-\end{figure}
+  \frametitle{Проблема: Галлюцинации в LLM}
+  \footnotesize
+  
+  \begin{block}{Сильные стороны LLM}
+      Современные большие языковые модели демонстрируют выдающиеся способности в решении сложных математических задач при генерации пошаговых решений chain-of-thought.
+  \end{block}
+
+  \begin{alertblock}{Критическая проблема}
+      Модели остаются склонными к галлюцинациям — генерации правдоподобного, но логически некорректного или фактически неверного контента.
+  \end{alertblock}
+
+  \begin{block}{Эффект распространения}
+      \begin{enumerate}
+          \item Один ошибочный логический шаг $\rightarrow$
+          \item Распространяется через всё решение $\rightarrow$
+          \item Испорченный финальный ответ
+      \end{enumerate}
+  \end{block}
+  \small \textit{Детекция таких ошибок критически важна для повышения надёжности LLM-генерации рассуждений.}
 \end{frame}
 
+% Слайд 3
 \begin{frame}
-\frametitle{Заключение}
-\framesubtitle{Описание полученных результатов}
+  \frametitle{Существующие подходы к детекции ошибок}
+  
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{ORM (Outcome Reward Models)}
+              Присваивают награду на основе \textbf{финального ответа} траектории рассуждений. \\
+              \vspace{1em}
+              \footnotesize \textit{Ограничение: не позволяет идентифицировать конкретный ошибочный шаг в цепочке рассуждений.}
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{PRM (Process Reward Models)}
+              Работают на \textbf{уровне шагов}, присваивая награду каждому промежуточному шагу, обусловленному задачей и всеми предыдущими шагами. \\
+              \vspace{0.5em}
+              \footnotesize \textit{Стандартный подход для верификации рассуждений благодаря более точной гранулярности.}
+          \end{block}
+      \end{column}
+  \end{columns}
+  
+  \vspace{0.5em}
+  \begin{block}{}
+      \textbf{Step-level супервизия} позволяет PRM идентифицировать галлюцинированные или некорректные шаги в цепочке рассуждений. Благодаря этой более точной гранулярности, PRM стали стандартом для верификации.
+  \end{block}
 \end{frame}
 
+% Слайд 4
+\begin{frame}
+  \frametitle{Ограничения: Проблемы текущих датасетов}
+  \footnotesize
+  
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{1. Гранулярность супервизии}
+              Супервизия почти исключительно предоставляется на \textbf{уровне шагов}. \\
+              На практике галлюцинации часто происходят на \textbf{более мелкой гранулярности}:
+              \begin{itemize}
+                  \item Арифметическая ошибка внутри шага
+                  \item Необоснованное преобразование внутри иначе корректного шага
+              \end{itemize}
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{2. Масштаб датасетов}
+              Многие датасеты типично большие — сотни тысяч примеров. \\
+              Это создаёт проблемы:
+              \begin{itemize}
+                  \item Построение датасетов становится дорогостоящим
+                  \item Обучение PRM на них требует значительных вычислительных ресурсов
+              \end{itemize}
+          \end{block}
+      \end{column}
+  \end{columns}
+
+  \vspace{0.5em}
+  \begin{alertblock}{Необходимость}
+      Методология для генерации span-level галлюцинационных аннотаций в математических рассуждениях с автоматизацией процесса.
+  \end{alertblock}
+\end{frame}
+
+% Слайд 5
+\begin{frame}
+  \frametitle{Решение: SHARP-Math}
+  \framesubtitle{Высококачественный датасет для детекции галлюцинаций}
+  \footnotesize
+
+  \begin{columns}[T]
+      \begin{column}{0.5\textwidth}
+          \begin{block}{Ключевое отличие}
+              В отличие от существующих ресурсов (с метками на уровне шагов), SHARP-Math предоставляет \textbf{детальные аннотации на уровне span (фрагментов)}, сгенерированные через автоматизированный pipeline.
+          \end{block}
+          \begin{block}{Методология}
+              Синтезирует \textbf{реалистичные траектории рассуждений} с точной разметкой ошибок.
+          \end{block}
+          \begin{itemize}
+              \item \textbf{11K} примеров
+              \item \textbf{88\%} с ошибками
+              \item \textbf{12\%} полностью корректных
+          \end{itemize}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Достижения}
+              \begin{itemize}
+                  \item \textbf{Первый датасет} специально для span-level детекции галлюцинаций (автоматическая генерация).
+                  \item \textbf{State-of-the-art} производительность на ProcessBench (PRM 1.5B достигает 56.3 F1).
+                  \item \textbf{В 1-2 порядка меньше} данных по сравнению с открытыми датасетами.
+              \end{itemize}
+          \end{block}
+      \end{column}
+  \end{columns}
+\end{frame}
+
+% Слайд 6
+\begin{frame}
+  \frametitle{Методология: Трёхэтапный pipeline}
+  \footnotesize
+  
+  \begin{columns}[T]
+      \begin{column}{0.31\textwidth}
+          \begin{block}{1. Выбор задач}
+              Задачи и эталонные решения из датасета \textbf{MATH}. Выбран из-за сложных задач и широкого охвата математических дисциплин.
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.34\textwidth}
+          \begin{block}{2. Генерация решений}
+              Использование \textbf{Mistral-7B-Instruct} для генерации траекторий рассуждений. Модель создаёт связные пошаговые решения с естественным распределением ошибок.
+          \end{block}
+      \end{column}
+
+      \begin{column}{0.31\textwidth}
+          \begin{block}{3. Span-аннотации}
+              Детекция с помощью \textbf{gpt-oss-120B} как автоматического аннотатора. Сравнивает решение с эталоном и оборачивает фрагменты в теги.
+          \end{block}
+      \end{column}
+  \end{columns}
+  
+  \vspace{0.5em}
+  \begin{block}{Фильтрация и очистка}
+      \small Применяются эвристические фильтры: исключение примеров со спанами длиннее 110 символов, более 35 спанов, или с malformed генерациями. 
+      После фильтрации: \textbf{11,678 высококачественных примеров}.
+  \end{block}
+\end{frame}
+
+% Слайд 7
+\begin{frame}
+  \frametitle{Сравнение с существующими датасетами}
+  \scriptsize
+  
+  \begin{table}[h]
+  \scriptsize
+  \begin{tabularx}{\textwidth}{Y Y Y Y Y}
+      \toprule
+      \textbf{Датасет} & \textbf{Разметка} & \textbf{Размер} & \textbf{Доступн.} & \textbf{Гранул.} \\
+      \midrule
+      PRM800K & Ручная & 415K & Открытый & Step-level \\
+      QwenPRM & Авто & 1,500K & Закрытый & Step-level \\
+      Math-Shepherd & Авто & 445K & Открытый & Step-level \\
+      RLHFlow-PRM & Авто & 253K & Открытый & Step-level \\
+      \midrule
+      \textbf{SHARP-Math (ours)} & \textbf{Авто} & \textbf{11K} & \textbf{Открытый} & \textbf{Span-level} \\
+      \bottomrule
+  \end{tabularx}
+  \end{table}
+
+  \vspace{0.5em}
+  \begin{columns}[T]
+      \begin{column}{0.3\textwidth}
+          \scriptsize\textbf{Компактность:} \\ В 10-50 раз меньше данных при более плотной супервизии
+      \end{column}
+      \begin{column}{0.33\textwidth}
+          \scriptsize\textbf{Точность:} \\ Span-level аннотации точнее локализуют ошибки
+      \end{column}
+      \begin{column}{0.3\textwidth}
+          \scriptsize\textbf{Доступность:} \\ Полностью открытый датасет для сообщества
+      \end{column}
+  \end{columns}
+\end{frame}
+
+% Слайд 8
+\begin{frame}
+  \frametitle{Результаты: Производительность на ProcessBench}
+  \small
+  
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{7B Модель (Qwen2.5-Math-7B)}
+              \textbf{SHARP-Math-Span:} 67.0 F1 \\
+              PRM800K baseline: 56.5 F1 \\
+              \textit{+10.4 пунктов улучшения}
+          \end{block}
+          
+          \begin{block}{1.5B Модель (Qwen2.5-Math-1.5B)}
+              \textbf{SHARP-Math-Span:} 60.0 F1 \\
+              7B PRM800K baseline: 56.5 F1 \\
+              \textit{+3.5 пункта улучшения}
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Сравнение с другими моделями (7B)}
+              \scriptsize
+              \begin{tabularx}{\linewidth}{Y r}
+                  Qwen2.5-Math-PRM-7B & 73.5 F1 \\
+                  R-PRM-7B-DPO & 70.4 F1 \\
+                  PathFinder-PRM-7B & 69.5 F1 \\
+                  \textbf{SHARP-Math-Span (ours)} & \textbf{67.0 F1} \\
+                  Qwen2.5-Math-7B-PRM800K & 56.5 F1 \\
+                  Skywork-PRM-7B & 42.1 F1 \\
+              \end{tabularx}
+          \end{block}
+          \footnotesize \textit{Конкурентная обобщаемость на всех датасетах: GSM8K, MATH, OlympiadBench, Omni-MATH.}
+      \end{column}
+  \end{columns}
+\end{frame}
+
+% Слайд 9
+\begin{frame}
+  \frametitle{Эффективность данных и масштабирование}
+  
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Размер датасета}
+              \textbf{SHARP-Math:} 11K (Наш подход) \\
+              R-PRM-7B: 285K-553K \\
+              RetrievalPRM-7B: 445K \\
+              \vspace{0.5em}
+              \textit{В 10-50 раз меньше данных}
+          \end{block}
+          \begin{block}{Performance-per-sample}
+              Плотная супервизия в SHARP-Math обеспечивает \textbf{более высокое качество на единицу данных} по сравнению с традиционными датасетами уровня шагов.
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Кривая обучения (F1 vs Токены)}
+              % Заглушка для графика. В оригинале здесь график со сравнением скорости достижения нужного F1 Score.
+              \centering
+              %\includegraphics[width=\textwidth]{learning_curve_placeholder.pdf}
+              \textit{[График: SHARP-Math быстрее достигает высокого F1, тогда как PRM800K имеет более медленное улучшение]}
+              
+              \vspace{0.5em}
+              \footnotesize
+              \begin{itemize}
+                  \item \textbf{SHARP-Math:} F1 $\sim$44.6 после 0.45M токенов
+                  \item \textbf{PRM800K:} F1 > 60 при $\sim$2.0M токенов
+              \end{itemize}
+          \end{block}
+      \end{column}
+  \end{columns}
+\end{frame}
+
+% Слайд 10
+\begin{frame}
+  \frametitle{Абляционное исследование гранулярности}
+  
+  \small Для проверки вклада источника данных и гранулярности аннотаций проводилось обучение одних и тех же PRM backbone при идентичных гиперпараметрах на двух контролируемых датасетах: SHARP-Math-Span и SHARP-Math-Step.
+  
+  \vspace{0.5em}
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{7B Backbone}
+              \textbf{SHARP-Math-Span:} 67.0 F1 \textit{(Лучший результат)} \\
+              SHARP-Math-Step: 65.8 F1 \textit{(Базовый уровень)} \\
+              \vspace{0.5em}
+              \textbf{Вывод: Span лучше для 7B}
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{1.5B Backbone}
+              \textbf{SHARP-Math-Span:} 60.0 F1 \textit{(Лучший результат)} \\
+              SHARP-Math-Step: 59.2 F1 \textit{(Базовый уровень)} \\
+              \vspace{0.5em}
+              \textbf{Вывод: Span лучше для 1.5B}
+          \end{block}
+      \end{column}
+  \end{columns}
+
+  \vspace{0.5em}
+  \begin{block}{Ключевой вывод}
+      \footnotesize Эффект span-аннотаций не зависит от \textbf{ёмкости модели}. Span-аннотации обеспечивают более богатый сигнал обучения, а модели обученные на таких аннотациях превосходят модели обученные на step-аннотациях в обоих размерах.
+  \end{block}
+\end{frame}
+
+% Слайд 11
+\begin{frame}
+  \frametitle{Ограничения и этические соображения}
+  \footnotesize
+  
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Ограничения датасета}
+              \begin{enumerate}
+                  \item Охватывает \textbf{только задачи из MATH} — ограниченная область.
+                  \item Сгенерированы \textbf{одной небольшой моделью} (вносит смещение).
+                  \item Требует \textbf{дополнительной валидации} с измерением меж-аннотаторного согласия.
+              \end{enumerate}
+          \end{block}
+          
+          \begin{block}{Планы по улучшению}
+              Расширение датасета для дополнительных задач и интеграция \textbf{нескольких моделей} для генерации галлюцинаций.
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Этические соображения}
+              \textbf{Риск чрезмерного доверия:} Пользователи могут чрезмерно полагаться на детекцию ошибок. \\
+              \textbf{Митигация:} Чёткая документация \textbf{ограничений и предполагаемого исследовательского использования.}
+          \end{block}
+          
+          \begin{block}{Приватность данных}
+              \begin{itemize}
+                  \item Не содержит персональной информации
+                  \item Данные полностью сгенерированы моделью
+                  \item Нет данных от человеческих пользователей
+              \end{itemize}
+          \end{block}
+      \end{column}
+  \end{columns}
+\end{frame}
+
+% Слайд 12
+\begin{frame}
+  \frametitle{Ключевые выводы: Итоги исследования}
+  \footnotesize
+  
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Первый span-level датасет}
+              \textbf{SHARP-Math} — первый открытый датасет с детальными span-level аннотациями для математических ошибок рассуждений.
+          \end{block}
+          \begin{block}{Превосходная производительность}
+              Обучение PRM на плотном span-level сигнале даёт \textbf{превосходное качество} даже при небольшом количестве данных.
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Автоматизация процесса}
+              Автоматизация аннотации решает проблемы \textbf{масштабируемости и гранулярности} существующих датасетов.
+          \end{block}
+          \begin{block}{Открытость для сообщества}
+              Полностью открытый датасет для \textbf{исследовательского сообщества} и дальнейшего развития.
+          \end{block}
+      \end{column}
+  \end{columns}
+  
+  \vspace{0.5em}
+  \begin{center}
+      \scriptsize\textit{\textbf{SHARP-Math} создаёт основу для data-efficient верификаторов рассуждений и более надёжных математических LLM.}
+  \end{center}
+\end{frame}
+
+% Финальный слайд
 \begin{frame}
 \begin{center}
 {\Large Спасибо за~внимание!}
 \end{center}
 \end{frame}
+
 \end{document}
