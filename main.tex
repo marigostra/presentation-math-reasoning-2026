@@ -16,6 +16,8 @@
 \beamertemplatenavigationsymbolsempty
 \setbeamertemplate{footline}[frame number]
 \usecolortheme{seahorse}
+\usepackage{xcolor}
+\newcommand{\hall}[1]{\colorbox{red!20}{#1}}
 
 \DeclareSymbolFont{greek}{U}{eur}{m}{n}                                                        
 \SetSymbolFont{greek}{bold}{U}{eur}{b}{n}                                                      
@@ -50,186 +52,79 @@
 \let\varsigma\sigma                                                                            
 \DeclareMathSymbol{\varphi}{\mathord}{greek}{"27}
 
-\title{Разработка датасета и сопутствующего инструментария
- для~математического вывода}
-\author{Макар Гороховик}
+\title[Разработка датасета для детекции галлюцинаций]{Разработка датасета и сопутствующего инструментария\texorpdfstring{\\}{} для детекции галлюцинаций в размышлениях больших языковых моделей в математических задачах}
+\author[Макар Гороховик]{\texorpdfstring{Макар Гороховик\\[0.4em]\small Научный руководитель: канд.\ техн.\ наук Пожидаев Михаил Сергеевич\\\small доцент кафедры теоретических основ информатики}{Макар Гороховик, научный руководитель: Пожидаев Михаил Сергеевич}}
 \date{\today}
 
 \begin{document}
 \maketitle
 
+
 % Слайд 1
 \begin{frame}
-  \frametitle{Введение: Проект SHARP}
-  \begin{center}
-      \Huge \textbf{SHARP} \\[0.5em]
-      \Large Span-level Hallucination Annotation \\ for Reasoning Paths
-  \end{center}
-  \vspace{1em}
-  
-  \large Датасет для детекции галлюцинаций на уровне фрагментов в математических рассуждениях.
-  
-  \vspace{1em}
-  \normalsize
-  \begin{itemize}
-      \item \textbf{11K} примеров
-      \item \textbf{Span-level} аннотации
-      \item \textbf{Open Source}
-  \end{itemize}
+  \frametitle{Проблема, задача и ограничения существующих подходов}
+  \scriptsize
+
+  \begin{alertblock}{Проблема}
+      LLM нередко строят правдоподобные, но \textbf{логически неверные рассуждения}. Ошибка может возникать внутри одного фрагмента шага, а затем искажать всё решение и финальный ответ.
+  \end{alertblock}
+
+  \begin{block}{Постановка задачи}
+      Нужно \textbf{находить ошибку внутри рассуждения}, а не только проверять итог. Для этого нужен датасет с детальной разметкой ошибочных фрагментов и масштабируемая схема его построения.
+  \end{block}
+
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Существующие подходы}
+              \textbf{ORM} оценивают только итоговый ответ. \\
+              \textbf{PRM} оценивают рассуждение по шагам и потому полезнее для верификации.
+          \end{block}
+      \end{column}
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Их минусы}
+              Step-level супервизия остаётся грубой: внутри шага часто смешаны верные и неверные фрагменты. Крупные PRM-датасеты также дороги в разметке и обучении.
+          \end{block}
+      \end{column}
+  \end{columns}
 \end{frame}
 
 % Слайд 2
 \begin{frame}
-  \frametitle{Проблема: Галлюцинации в LLM}
-  \footnotesize
-  
-  \begin{block}{Сильные стороны LLM}
-      Современные большие языковые модели демонстрируют выдающиеся способности в решении сложных математических задач при генерации пошаговых решений chain-of-thought.
+  \frametitle{Решение: SHARP-Math}
+  \scriptsize
+
+  \begin{block}{Ключевая идея}
+      Мы предлагаем \textbf{SHARP-Math} --- датасет со \textbf{span-level аннотациями}, где размечается конкретный ошибочный фрагмент, а не только весь шаг. Это даёт более точный сигнал для обучения PRM.
   \end{block}
 
-  \begin{alertblock}{Критическая проблема}
-      Модели остаются склонными к галлюцинациям — генерации правдоподобного, но логически некорректного или фактически неверного контента.
-  \end{alertblock}
-
-  \begin{block}{Эффект распространения}
-      \begin{enumerate}
-          \item Один ошибочный логический шаг $\rightarrow$
-          \item Распространяется через всё решение $\rightarrow$
-          \item Испорченный финальный ответ
-      \end{enumerate}
-  \end{block}
-  \small \textit{Детекция таких ошибок критически важна для повышения надёжности LLM-генерации рассуждений.}
+  \begin{columns}[T]
+      \begin{column}{0.52\textwidth}
+          \begin{block}{Как строится датасет}
+              \begin{enumerate}
+                  \item Берутся задачи и эталонные решения из \textbf{MATH}.
+                  \item \textbf{Mistral-7B-Instruct} генерирует пошаговые решения с естественными ошибками.
+                  \item \textbf{gpt-oss-120B} сравнивает решение с эталоном и размечает ошибочные спаны.
+                  \item Затем применяются фильтры качества и удаляются некорректные генерации.
+              \end{enumerate}
+          \end{block}
+      \end{column}
+      \begin{column}{0.44\textwidth}
+          \begin{block}{Что это даёт}
+              \begin{itemize}
+                  \item \textbf{11K} примеров после фильтрации
+                  \item \textbf{88\%} решений с ошибками
+                  \item Более точную локализацию ошибок, чем step-level подход
+                  \item Меньший объём данных при сильном обучающем сигнале
+              \end{itemize}
+          \end{block}
+          \begin{alertblock}{Главный вклад}
+              SHARP-Math делает детекцию математических галлюцинаций \textbf{точнее} и \textbf{масштабируемее}.
+          \end{alertblock}
+      \end{column}
+  \end{columns}
 \end{frame}
 
 % Слайд 3
-\begin{frame}
-  \frametitle{Существующие подходы к детекции ошибок}
-  
-  \begin{columns}[T]
-      \begin{column}{0.48\textwidth}
-          \begin{block}{ORM (Outcome Reward Models)}
-              Присваивают награду на основе \textbf{финального ответа} траектории рассуждений. \\
-              \vspace{1em}
-              \footnotesize \textit{Ограничение: не позволяет идентифицировать конкретный ошибочный шаг в цепочке рассуждений.}
-          \end{block}
-      \end{column}
-      
-      \begin{column}{0.48\textwidth}
-          \begin{block}{PRM (Process Reward Models)}
-              Работают на \textbf{уровне шагов}, присваивая награду каждому промежуточному шагу, обусловленному задачей и всеми предыдущими шагами. \\
-              \vspace{0.5em}
-              \footnotesize \textit{Стандартный подход для верификации рассуждений благодаря более точной гранулярности.}
-          \end{block}
-      \end{column}
-  \end{columns}
-  
-  \vspace{0.5em}
-  \begin{block}{}
-      \textbf{Step-level супервизия} позволяет PRM идентифицировать галлюцинированные или некорректные шаги в цепочке рассуждений. Благодаря этой более точной гранулярности, PRM стали стандартом для верификации.
-  \end{block}
-\end{frame}
-
-% Слайд 4
-\begin{frame}
-  \frametitle{Ограничения: Проблемы текущих датасетов}
-  \footnotesize
-  
-  \begin{columns}[T]
-      \begin{column}{0.48\textwidth}
-          \begin{block}{1. Гранулярность супервизии}
-              Супервизия почти исключительно предоставляется на \textbf{уровне шагов}. \\
-              На практике галлюцинации часто происходят на \textbf{более мелкой гранулярности}:
-              \begin{itemize}
-                  \item Арифметическая ошибка внутри шага
-                  \item Необоснованное преобразование внутри иначе корректного шага
-              \end{itemize}
-          \end{block}
-      \end{column}
-      
-      \begin{column}{0.48\textwidth}
-          \begin{block}{2. Масштаб датасетов}
-              Многие датасеты типично большие — сотни тысяч примеров. \\
-              Это создаёт проблемы:
-              \begin{itemize}
-                  \item Построение датасетов становится дорогостоящим
-                  \item Обучение PRM на них требует значительных вычислительных ресурсов
-              \end{itemize}
-          \end{block}
-      \end{column}
-  \end{columns}
-
-  \vspace{0.5em}
-  \begin{alertblock}{Необходимость}
-      Методология для генерации span-level галлюцинационных аннотаций в математических рассуждениях с автоматизацией процесса.
-  \end{alertblock}
-\end{frame}
-
-% Слайд 5
-\begin{frame}
-  \frametitle{Решение: SHARP-Math}
-  \framesubtitle{Высококачественный датасет для детекции галлюцинаций}
-  \footnotesize
-
-  \begin{columns}[T]
-      \begin{column}{0.5\textwidth}
-          \begin{block}{Ключевое отличие}
-              В отличие от существующих ресурсов (с метками на уровне шагов), SHARP-Math предоставляет \textbf{детальные аннотации на уровне span (фрагментов)}, сгенерированные через автоматизированный pipeline.
-          \end{block}
-          \begin{block}{Методология}
-              Синтезирует \textbf{реалистичные траектории рассуждений} с точной разметкой ошибок.
-          \end{block}
-          \begin{itemize}
-              \item \textbf{11K} примеров
-              \item \textbf{88\%} с ошибками
-              \item \textbf{12\%} полностью корректных
-          \end{itemize}
-      \end{column}
-      
-      \begin{column}{0.48\textwidth}
-          \begin{block}{Достижения}
-              \begin{itemize}
-                  \item \textbf{Первый датасет} специально для span-level детекции галлюцинаций (автоматическая генерация).
-                  \item \textbf{State-of-the-art} производительность на ProcessBench (PRM 1.5B достигает 56.3 F1).
-                  \item \textbf{В 1-2 порядка меньше} данных по сравнению с открытыми датасетами.
-              \end{itemize}
-          \end{block}
-      \end{column}
-  \end{columns}
-\end{frame}
-
-% Слайд 6
-\begin{frame}
-  \frametitle{Методология: Трёхэтапный pipeline}
-  \footnotesize
-  
-  \begin{columns}[T]
-      \begin{column}{0.31\textwidth}
-          \begin{block}{1. Выбор задач}
-              Задачи и эталонные решения из датасета \textbf{MATH}. Выбран из-за сложных задач и широкого охвата математических дисциплин.
-          \end{block}
-      \end{column}
-      
-      \begin{column}{0.34\textwidth}
-          \begin{block}{2. Генерация решений}
-              Использование \textbf{Mistral-7B-Instruct} для генерации траекторий рассуждений. Модель создаёт связные пошаговые решения с естественным распределением ошибок.
-          \end{block}
-      \end{column}
-
-      \begin{column}{0.31\textwidth}
-          \begin{block}{3. Span-аннотации}
-              Детекция с помощью \textbf{gpt-oss-120B} как автоматического аннотатора. Сравнивает решение с эталоном и оборачивает фрагменты в теги.
-          \end{block}
-      \end{column}
-  \end{columns}
-  
-  \vspace{0.5em}
-  \begin{block}{Фильтрация и очистка}
-      \small Применяются эвристические фильтры: исключение примеров со спанами длиннее 110 символов, более 35 спанов, или с malformed генерациями. 
-      После фильтрации: \textbf{11,678 высококачественных примеров}.
-  \end{block}
-\end{frame}
-
-% Слайд 7
 \begin{frame}
   \frametitle{Сравнение с существующими датасетами}
   \scriptsize
@@ -245,7 +140,7 @@
       Math-Shepherd & Авто & 445K & Открытый & Step-level \\
       RLHFlow-PRM & Авто & 253K & Открытый & Step-level \\
       \midrule
-      \textbf{SHARP-Math (ours)} & \textbf{Авто} & \textbf{11K} & \textbf{Открытый} & \textbf{Span-level} \\
+      \textbf{SHARP-Math (наш)} & \textbf{Авто} & \textbf{11K} & \textbf{Открытый} & \textbf{Span-level} \\
       \bottomrule
   \end{tabularx}
   \end{table}
@@ -264,7 +159,32 @@
   \end{columns}
 \end{frame}
 
-% Слайд 8
+% Слайд 4
+\begin{frame}
+  \frametitle{Обучение PRM на SHARP-Math}
+  \tiny
+
+  \begin{block}{Преобразование данных (Span-to-Step)}
+      Для обучения PRM span-аннотации конвертируются в step-level формат:
+      \begin{itemize}
+          \item Шаг помечается как \textbf{неверный}, если содержит хотя бы один галлюцинированный span; иначе — \textbf{верный}.
+          \item Цепочка рассуждений \textbf{обрезается} на первом неверном шаге (остаток исключается из обучения).
+          \item Проведена деконтаминация: удалены примеры, пересекающиеся с тестовым ProcessBench.
+      \end{itemize}
+  \end{block}
+
+  \begin{block}{Архитектура и схема обучения}
+      \begin{itemize}
+          \item \textbf{Базовые веса:} исходная \textbf{Qwen2.5-Math} (1.5B и 7B); обучение проводится в формате \textbf{SFT}.
+          \item Последняя \textbf{Language Modeling Head} заменяется на \textbf{Scalar-Value Head}.
+          \item \textbf{Формат входа:} условие + шаги решения, разделённые токеном \texttt{\textbackslash n\textbackslash n}.
+          \item Скалярная голова обучается давать осмысленное значение только на \textbf{последнем токене шага} перед разделителем.
+          \item Остальные токены шага \textbf{не участвуют в функции потерь}, но влияют на контекст через скрытые состояния.
+      \end{itemize}
+  \end{block}
+\end{frame}
+
+% Слайд 5
 \begin{frame}
   \frametitle{Результаты: Производительность на ProcessBench}
   \small
@@ -297,11 +217,118 @@
               \end{tabularx}
           \end{block}
           \footnotesize \textit{Конкурентная обобщаемость на всех датасетах: GSM8K, MATH, OlympiadBench, Omni-MATH.}
+
+          \begin{alertblock}{Главный вывод}
+              Даже при существенно меньшем объёме данных SHARP-Math даёт заметный прирост качества по сравнению с крупными step-level датасетами.
+          \end{alertblock}
       \end{column}
   \end{columns}
 \end{frame}
 
-% Слайд 9
+% Слайд 6
+\begin{frame}
+  \frametitle{Ограничения и дальнейшие планы}
+  \footnotesize
+
+  \begin{block}{Ограничения датасета}
+      \begin{enumerate}
+          \item Охватывает \textbf{только задачи из MATH} — ограниченная область.
+          \item Сгенерирован одной небольшой моделью, что может вносить смещение.
+          \item Качество разметки зависит от качества \textbf{модели-аннотатора}, поэтому возможны систематические ошибки в span-аннотациях.
+          \item Требует \textbf{дополнительной валидации} и оценки меж-аннотаторного согласия.
+      \end{enumerate}
+  \end{block}
+
+  \begin{block}{Дальнейшие планы}
+      \begin{itemize}
+          \item Расширить датасет на новые типы математических задач.
+          \item Использовать \textbf{несколько моделей} для генерации более разнообразных галлюцинаций.
+          \item Усилить валидацию качества аннотаций и проверить переносимость подхода на другие домены.
+      \end{itemize}
+  \end{block}
+\end{frame}
+
+% Слайд 7
+\begin{frame}
+  \frametitle{Ключевые выводы: Итоги исследования}
+  \footnotesize
+  
+  \begin{columns}[T]
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Первый span-level датасет}
+              \textbf{SHARP-Math} — первый открытый датасет с детальными span-level аннотациями для математических ошибок рассуждений.
+          \end{block}
+          \begin{block}{Превосходная производительность}
+              Обучение PRM на плотном span-level сигнале даёт \textbf{превосходное качество} даже при небольшом количестве данных.
+          \end{block}
+      \end{column}
+      
+      \begin{column}{0.48\textwidth}
+          \begin{block}{Автоматизация процесса}
+              Автоматизация аннотации решает проблемы \textbf{масштабируемости и гранулярности} существующих датасетов.
+          \end{block}
+          \begin{block}{Открытость для сообщества}
+              Полностью открытый датасет для \textbf{исследовательского сообщества} и дальнейшего развития.
+          \end{block}
+      \end{column}
+  \end{columns}
+  
+  \vspace{0.4em}
+  \begin{block}{Практическая ценность}
+      \scriptsize Такие PRM можно использовать для верификации пошаговых решений, reranking и фильтрации траекторий рассуждения, а также для повышения надёжности математических LLM в образовательных и исследовательских сценариях.
+  \end{block}
+\end{frame}
+
+% Финальный слайд
+\begin{frame}
+\begin{center}
+{\Large Спасибо за~внимание!}
+\end{center}
+\end{frame}
+
+% Слайд: Пример span-аннотации
+\begin{frame}[fragile]
+  \frametitle{Пример span-level аннотации}
+  \tiny
+
+  \textbf{Задача:} What is the largest prime factor of 1391?
+
+  \vspace{0.3em}
+  \textbf{Эталонное решение:} Since $91 = 13\cdot 7$, we find that
+  \[
+  1391 = 1300 + 91 = 13\cdot 100 + 13\cdot 7 = 13(100+7) = 13\cdot 107.
+  \]
+  Since 107 is prime, the largest prime factor of 1391 is $\boxed{107}$.
+
+  \vspace{0.3em}
+  \textbf{Аннотированная траектория:}
+
+  To find the largest prime factor of 1391, we can start by checking if it's divisible by any prime numbers.
+
+  1. 1391 is not divisible by 2, as it's an odd number.
+
+  2. 1391 is not divisible by 3, as the sum of its digits (1+3+9+1 = 14) is not a multiple of 3.
+
+  3. 1391 is not divisible by 5, as it doesn't end in 0 or 5.
+
+  4. 1391 is not divisible by 7, as 1391 ÷ 7 = 198.714285714...
+
+  5. 1391 is not divisible by 11, as the alternating sum of its digits (1-3+9-1 = 6) is not a multiple of 11.
+
+  6. 1391 is \hall{not} divisible by 13, as 1391 ÷ 13 = \hall{106.923076923}...
+
+  7. 1391 is \hall{divisible} by 17, as 1391 ÷ 17 = \hall{82}.
+
+  Since 1391 is divisible by 17, we can divide it by 17 to get 82.
+
+  8. 82 is not a prime number, as it's divisible by 2 (82 ÷ 2 = 41).
+
+  9. 41 is a prime number, as it's not divisible by any prime numbers less than its square root.
+
+  Therefore, the largest prime factor of 1391 is \boxed{\hall{41}}.
+\end{frame}
+
+% Слайд 7
 \begin{frame}
   \frametitle{Эффективность данных и масштабирование}
   
@@ -337,7 +364,7 @@
   \end{columns}
 \end{frame}
 
-% Слайд 10
+% Слайд 8
 \begin{frame}
   \frametitle{Абляционное исследование гранулярности}
   
@@ -370,79 +397,23 @@
   \end{block}
 \end{frame}
 
-% Слайд 11
+% Слайд 1
 \begin{frame}
-  \frametitle{Ограничения и этические соображения}
-  \footnotesize
-  
-  \begin{columns}[T]
-      \begin{column}{0.48\textwidth}
-          \begin{block}{Ограничения датасета}
-              \begin{enumerate}
-                  \item Охватывает \textbf{только задачи из MATH} — ограниченная область.
-                  \item Сгенерированы \textbf{одной небольшой моделью} (вносит смещение).
-                  \item Требует \textbf{дополнительной валидации} с измерением меж-аннотаторного согласия.
-              \end{enumerate}
-          \end{block}
-          
-          \begin{block}{Планы по улучшению}
-              Расширение датасета для дополнительных задач и интеграция \textbf{нескольких моделей} для генерации галлюцинаций.
-          \end{block}
-      \end{column}
-      
-      \begin{column}{0.48\textwidth}
-          \begin{block}{Этические соображения}
-              \textbf{Риск чрезмерного доверия:} Пользователи могут чрезмерно полагаться на детекцию ошибок. \\
-              \textbf{Митигация:} Чёткая документация \textbf{ограничений и предполагаемого исследовательского использования.}
-          \end{block}
-          
-          \begin{block}{Приватность данных}
-              \begin{itemize}
-                  \item Не содержит персональной информации
-                  \item Данные полностью сгенерированы моделью
-                  \item Нет данных от человеческих пользователей
-              \end{itemize}
-          \end{block}
-      \end{column}
-  \end{columns}
-\end{frame}
-
-% Слайд 12
-\begin{frame}
-  \frametitle{Ключевые выводы: Итоги исследования}
-  \footnotesize
-  
-  \begin{columns}[T]
-      \begin{column}{0.48\textwidth}
-          \begin{block}{Первый span-level датасет}
-              \textbf{SHARP-Math} — первый открытый датасет с детальными span-level аннотациями для математических ошибок рассуждений.
-          \end{block}
-          \begin{block}{Превосходная производительность}
-              Обучение PRM на плотном span-level сигнале даёт \textbf{превосходное качество} даже при небольшом количестве данных.
-          \end{block}
-      \end{column}
-      
-      \begin{column}{0.48\textwidth}
-          \begin{block}{Автоматизация процесса}
-              Автоматизация аннотации решает проблемы \textbf{масштабируемости и гранулярности} существующих датасетов.
-          \end{block}
-          \begin{block}{Открытость для сообщества}
-              Полностью открытый датасет для \textbf{исследовательского сообщества} и дальнейшего развития.
-          \end{block}
-      \end{column}
-  \end{columns}
-  
-  \vspace{0.5em}
+  \frametitle{Введение: Проект SHARP}
   \begin{center}
-      \scriptsize\textit{\textbf{SHARP-Math} создаёт основу для data-efficient верификаторов рассуждений и более надёжных математических LLM.}
+      \Huge \textbf{SHARP} \\[0.5em]
+      \Large Span-level Hallucination Annotation \\ for Reasoning Paths
   \end{center}
+  \vspace{1em}
+  
+  \large Датасет для детекции галлюцинаций на уровне фрагментов в математических рассуждениях.
+  
+  \vspace{1em}
+  \normalsize
+  \begin{itemize}
+      \item \textbf{11K} примеров
+      \item \textbf{Span-level} аннотации
+      \item \textbf{Open Source}
+  \end{itemize}
 \end{frame}
-
-% Финальный слайд
-\begin{frame}
-\begin{center}
-{\Large Спасибо за~внимание!}
-\end{center}
-\end{frame}
-
 \end{document}
